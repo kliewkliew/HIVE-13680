@@ -1,0 +1,21 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage{hyperref}
+
+\title{Design Considerations}
+\author{Kevin Liew}
+
+\begin{document}
+
+\maketitle
+
+\section{RPC}
+	\paragraph{How are ResultSets transferred? Batches contained in Thrift objects?} 
+
+\section{Compressor}
+	\paragraph{Should the preferred compressor be per-connection, or per-query?}
+
+	\paragraph{Should the client send a preferred compressor plugin's jar file? Or should the client specify the compressor in the connection string and require that the server already have the plugin?}
+		
+	\paragraph{Location of exemplar code for sending jars from the client and receiving at the server?}
+
+\end{document}
