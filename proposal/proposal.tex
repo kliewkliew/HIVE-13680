@@ -12,7 +12,8 @@
 	Hive data pipelines invariably involve JDBC/ODBC drivers which access Hive through its Thrift interface. 
 	Consequently, any enhancement to the Hive's Thrift data pipeline will benefit all users.
 	
-	Prior to \href{https://issues.apache.org/jira/browse/HIVE-12049}{HIVE-12049}
+	Prior to 
+	\href{https://issues.apache.org/jira/browse/HIVE-12049}{HIVE-12049}
 	, HiveServer2 would read a full ResultSet from HDFS before deserializing and re-serializing into Thrift objects for RPC transfer.
 	Following our enhancement, task nodes serialize Thrift objects from their own block of a ResultSet file. 
 	HiveServer2 simply transfers these objects to a remote client. 
@@ -23,10 +24,19 @@
 \end{abstract}
 
 \section{Introduction}
-	The changes proposed herein draw from the design document of 
-	\href{https://issues.apache.org/jira/browse/HIVE-12049}{HIVE-12049}, proposed by Rohit Dholakia.
+	The changes proposed herein draw from Rohit Dholakia's design document and patches for
+	\href{https://issues.apache.org/jira/browse/HIVE-10438}{HIVE-10438}, which implemented compression on HiveServer2 rather than in the task nodes.
+	Now that
+	\href{https://issues.apache.org/jira/browse/HIVE-12049}{HIVE-12049}
+	has been committed, compression can take place in parallel on the task nodes.
 	
-	This enhancement should improve performance without any configuration while providing flexibility yet through a simple interface.
+	Our goals for this enhancement are to:
+	\begin{itemize}
+		\item improve performance out-of-the-box
+		\item maintain compatibility with old clients
+		\item provide flexibility yet security
+		\item confer a simple interface
+	\end{itemize}
 
 \section{Proposed Changes}
 
