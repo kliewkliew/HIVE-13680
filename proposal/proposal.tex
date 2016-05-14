@@ -1,4 +1,5 @@
 \documentclass[11pt,a4paper]{article}
+\usepackage{float}
 \usepackage{hyperref}
 
 \title{HIVE-13680: Provide a way to compress ResultSets}
@@ -53,6 +54,8 @@
 	
 		To prevent breaking compatibility with old clients, the server will not compress results unless the client has requested compression.
 		However, new versions of beeline will try to negotiate a compressor scheme by default.
+		
+		
 	
 	\subsection{Server Security}
 		We place the onus of security on the server administrator, recommending Kerberos authentication with user-impersonation to limit the jar file to the same permissions as the authenticated user. 
@@ -60,7 +63,7 @@
 		
 		
 	\subsection{Configuration options}
-	\begin{table}[!h]
+	\begin{table}[H]
 		\begin{tabular}{| l | l | p{4cm} |} \hline
 			\textbf{Option} & \textbf{Default} & \textbf{Description} \\ \hline
 			hive.resultSet.compressor.enabled & true & Enable or disable compressor negotiation \\ \hline
@@ -71,14 +74,27 @@
 
 \section{Implementation}
 	\subsection{Compressed RowSet Structure}
-	\subsubsection{Thrift Object}
-	\subsubsection{HiveServer2 Class}
-	
+		Compressors will operate on row-batches in ThriftJDBCBinarySerDe. 
+		To model a compressed column, we proposed CompressedColumnBasedSet.
+		
+		In the event that a column is not compressible, the column will be a normal ColumnBasedSet.
+		
+		\subsubsection{HiveServer2 Class}
+			TBD
+			
+		\subsubsection{Thrift Object}
+			TBD
+			
 	\subsection{Compressor Interface}
-
+		TBD
+		%compress
+		%decompress
+		%isCompressible
 
 \section{Custom Compressors}
 		A default compressor will be implemented for Snappy.
 		To use other compression algorithms or to have type-specific compression, the user must implement the compressor interface.
 
+		more TBD
+		
 \end{document}
