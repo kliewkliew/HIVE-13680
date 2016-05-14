@@ -17,7 +17,7 @@
 	, HiveServer2 would read a full ResultSet from HDFS before deserializing and re-serializing into Thrift objects for RPC transfer.
 	Following our enhancement, task nodes serialize Thrift objects from their own block of a ResultSet file. 
 	HiveServer2 simply transfers these objects to a remote client. 
-	This parallel deserialization strategy reduced latency in the data pipeline.
+	This parallel serialization strategy reduced latency in the data pipeline.
 	
 	However, network load is often the most scarce resource in a system. 
 	As a further enhancement, this load can be eased by having task nodes compress their own block of a ResultSet as part of the serialization process.
@@ -32,50 +32,53 @@
 	
 	Our goals for this enhancement are to:
 	\begin{itemize}
-		\item improve performance out-of-the-box
+		\item improve performance out-of-the-box for new clients
 		\item maintain compatibility with old clients
 		\item provide flexibility yet security
 		\item confer a simple interface
 	\end{itemize}
 
-\section{Proposed Changes}
+\section{Design Overview}
 
-	\subsection{Compressed RowSet Structure}
-		\subsubsection{Thrift Object}
-		\subsubsection{HiveServer2 Class}
-		TODO
-
-	\subsection{Interface}
-		\subsubsection{Compressor Interface}
+	\subsection{Compressor Interface}
 			We will define a compressor interface which must be implemented by compressor plugins.
 			A Snappy compressor will compress all data-types using the Snappy algorithm.
 			Type-specific compression can be achieved by implementing a compressor that delegates compression to other compressors based on a case-switch block.
 		
 		
-		\subsubsection{Client-Server Negotiation}
-			The client will specify a preferred compressor upon connection. 
-			If the server does not have that compressor plugin, it will request the jar from the client. 
-			The client should send the compressor plugin and all dependencies.
-		
-			To prevent breaking compatibility with old clients, the server will not compress results unless the client has requested compression.
-			However, new versions of beeline will try to negotiate a compressor scheme by default.
-		
-		\subsubsection{Server Security}
-			We place the onus of security on the server administrator, recommending Kerberos authentication with user-impersonation to limit the jar file to the same permissions as the authenticated user. 
-			The server administrator also has the option to disable compressor plugins altogether.
+	\subsection{Client-Server Negotiation}
+		The client will specify a preferred compressor upon connection. 
+		If the server does not have that compressor plugin, it will request the jar from the client. 
+		The client should send the compressor plugin and all dependencies.
+	
+		To prevent breaking compatibility with old clients, the server will not compress results unless the client has requested compression.
+		However, new versions of beeline will try to negotiate a compressor scheme by default.
+	
+	\subsection{Server Security}
+		We place the onus of security on the server administrator, recommending Kerberos authentication with user-impersonation to limit the jar file to the same permissions as the authenticated user. 
+		The server administrator also has the option to disable compressor plugins altogether.
 		
 		
 	\subsection{Configuration options}
 	\begin{table}[!h]
 		\begin{tabular}{| l | l | p{4cm} |} \hline
 			\textbf{Option} & \textbf{Default} & \textbf{Description} \\ \hline
-			hive.resultSet.compressor.enabled & true & Enable or disable compression \\ \hline
+			hive.resultSet.compressor.enabled & true & Enable or disable compressor negotiation \\ \hline
 			%hive.resultSet.compressor & Snappy & The default compressor when the client has not specified one \\ \hline
 		\end{tabular}
 		\caption{Configuration options}
 	\end{table}
 
-\section{Type-Specific Compressors}
-	TODO
+\section{Implementation}
+	\subsection{Compressed RowSet Structure}
+	\subsubsection{Thrift Object}
+	\subsubsection{HiveServer2 Class}
+	
+	\subsection{Compressor Interface}
+
+
+\section{Custom Compressors}
+		A default compressor will be implemented for Snappy.
+		To use other compression algorithms or to have type-specific compression, the user must implement the compressor interface.
 
 \end{document}
