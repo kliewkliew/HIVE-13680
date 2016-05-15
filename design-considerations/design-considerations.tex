@@ -40,9 +40,8 @@
 	A list of disallowed compressors is not useful if we allow the client to send arbitrary jars with arbitrary entry-classes. If we instead have a list of allowed compressors, this list would require the server to have prior knowledge of all possible compressors. In this case, the server might as well be pre-loaded with those plugins and there is no need for the client to send the jars.
 
 \section{Compressor-Decompressor}
-	\paragraph{How do we handle the case where the compressor throws an exception while handling an inner batch?)}
-	Do we restart serialization and serialize the batch as an uncompressed column?
-	What do we do with prior batches that were already serialized?
+	\paragraph{How do we handle the case where the compressor throws an exception while handling an inner batch? Do we restart serialization and serialize the batch as an uncompressed column? What do we do with prior batches that were already serialized?)}
+	
 	
 	\paragraph{Where does decompression occur in the client? Will we operate on (Encoded)ColumnBasedSet or directly on TRowSet?}
 
