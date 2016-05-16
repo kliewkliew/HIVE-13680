@@ -71,9 +71,18 @@
 		
 	\subsection{Configuration options}
 		\begin{table}[H]
-			\begin{tabular}{| l | l | p{4cm} |} \hline
+			\begin{tabular}{| p{3cm} | c | p{6.5cm} |} \hline
 				\textbf{Option} & \textbf{Default} & \textbf{Description} \\ \hline
-				hive.resultSet.compressor.enabled & true & Enable or disable compressor negotiation \\ \hline
+					hive.resultSet\linebreak
+					.compressor\linebreak
+					.enabled
+				 & true & Enable or disable compressor negotiation \\ \hline
+					 hive.server2\linebreak
+					 .thrift\linebreak
+					 .resultset.max\linebreak
+					 .fetch.size
+				 & 1000 & Max number of rows sent in one Fetch RPC call by the server to the client. Also max number of rows in one compressed batch.
+				 \\ \hline
 			\end{tabular}
 			\caption{Configuration options}
 		\end{table}
@@ -99,6 +108,7 @@
 		
 		TBD
 		%where does decompression occur in the client? will we operate on (Encoded)ColumnBasedSet or directly on TRowSet?
+		%The client will have the entire blob containing contiguous batches, or does it receive batches separately? 
 		
 	\subsection{Compressed RowSet Structures}
 		\subsubsection{HiveServer2 Structures}
@@ -133,7 +143,7 @@
 			
 			TEnColumns `enData` is a binary blob containing the contiguous compressed batches within the node's block of the output file.
 			`nulls` is a bitmap indicating null rows in the column set.
-			`type is the column's data-type.
+			`type` is the column's data-type.
 			`batchSize` contains the batch size for each compressed batch.
 			
 			TRowSet `startRowOffet` and `rows` are deprecated following \href{https://issues.apache.org/jira/browse/HIVE-3746}{HIVE-3746}.
@@ -150,7 +160,12 @@
 				public boolean isCompressible(ColumnBuffer columns);
 			}
 		\end{lstlisting}
-
+		
+		Operating in the final task node, `compress` takes a batch of rows contained in `columns` (number of rows will be equal to or less than \linebreak hive.server2.thrift.resultset.max.fetch.size) and outputs a binary blob.
+		The compressor is free to pack additional details such as look-up tables within this blob.
+		
+		TBD
+		%The client will have the entire blob containing contiguous batches, or does it receive batches separately? 
 			
 \section{Custom Compressors}
 		A default compressor will be provided for Snappy compression.

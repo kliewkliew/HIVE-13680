@@ -42,7 +42,10 @@
 \section{Compressor-Decompressor}
 	\paragraph{How do we handle the case where the compressor throws an exception while handling an inner batch? Do we restart serialization and serialize the batch as an uncompressed column? What do we do with prior batches that were already serialized?)}
 	
-	
 	\paragraph{Where does decompression occur in the client? Will we operate on (Encoded)ColumnBasedSet or directly on TRowSet?}
+	
+	\paragraph{We are no longer storing the compressor-name with each column. Will that introduce any issues?}
+	
+	\paragraph{hive.server2.thrift.resultset.max.fetch.size: "Max number of rows sent in one Fetch RPC call by the server to the client." If the client receives batch-by-batch, then we don't need to store the batch size in TEnColumn because the client will receive and decompress each batch separately instead of receiving one huge blob with all batches?}
 
 \end{document}
