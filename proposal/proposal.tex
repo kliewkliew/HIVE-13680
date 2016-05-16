@@ -1,6 +1,17 @@
 \documentclass[11pt,a4paper]{article}
+
 \usepackage{float}
 \usepackage{hyperref}
+
+\usepackage{listings}
+\usepackage[usenames,dvipsnames]{color}
+\lstset{
+	language=Java,
+	basicstyle=\small\ttfamily,
+	keywordstyle=\color{Blue}\bf,
+	tabsize=2,
+	frame=single
+}
 
 \title{HIVE-13680: Provide a way to compress ResultSets}
 \author{Kevin Liew}
@@ -17,11 +28,11 @@
 	\href{https://issues.apache.org/jira/browse/HIVE-12049}{HIVE-12049}
 	, HiveServer2 would read a full ResultSet from HDFS before deserializing and re-serializing into Thrift objects for RPC transfer.
 	Following our enhancement, task nodes serialize Thrift objects from their own block of a ResultSet file. 
-	HiveServer2 simply transfers these objects to a remote client. 
+	HiveServer2 reads the Thrift output and deserializes all columns as one binary blob rather than column-by-column and transfers the ResultSet to the remote client. 
 	This parallel serialization strategy reduced latency in the data pipeline.
 	
-	However, network load is often the most scarce resource in a system. 
-	As a further enhancement, this load can be eased by having task nodes compress their own block of a ResultSet as part of the serialization process.
+	However, network capacity is often the most scarce resource in a system. 
+	As a further enhancement, network load can be eased by having task nodes compress their own block of a ResultSet as part of the serialization process.
 \end{abstract}
 
 \section{Introduction}
@@ -51,7 +62,7 @@
 		If the server does not have that compressor plugin, it will request the jar from the client. 
 		The client should send the compressor plugin and all dependencies.
 		
-		To prevent breaking compatibility with old clients, the server will not compress results unless the client has requested compression.
+		To maintain compatibility with old clients, the server will not compress results unless the client has requested compression.
 		However, new versions of beeline will try to negotiate a compressor scheme by default.
 		
 	\subsection{Server Security}
@@ -81,7 +92,7 @@
 		
 		Compressors will operate on the batch-level in ThriftJDBCBinarySerDe and compressed batches will be serialized contiguously in the output file. 
 		
-		In the event that a column is not compressible, the column will be serialized as an uncompressed TColumn.
+		In the event that a column is not compressible, the column will be serialized as an uncompressed column.
 		
 	\subsection{Decompression}
 		Results are serialized in contiguous compressed batches. Consequently, the client must deserialize batch-by-batch.
@@ -94,23 +105,51 @@
 			TBD
 		
 		\subsubsection{Thrift Objects}
-			TEnColumn must now store a list of batch sizes to delimit the compressed blob and allow decompression of contiguous batches of rows within each column.
+			TEnColumn must now store a list of batch offsets to delimit the compressed blob and allow decompression of contiguous batches of rows within each column. TRowSet will have a list of TEnColumn to store compressed columns.
 			Otherwise, the Thrift structures used to support compression are largely unchanged from 
 			\href{https://issues.apache.org/jira/browse/HIVE-10438}{HIVE-10438}
 			. They are described here for completeness.
 			
-			TBD
-			%full description of Thrift interface
+			\begin{lstlisting}[title=TCLIService.thrift,gobble=8,otherkeywords={binary,i32,i64,string,struct,TColumn,TEnColumn,TRow,TRowSet,TTypeId}]
+				//Represents an encoded column
+				struct TEnColumn {
+					1: required binary enData
+					2: required binary nulls
+					3: required TTypeId type
+					4: required list<i32> batchSize
+				}
+				
+				// Represents a rowset
+				struct TRowSet {
+					// The starting row offset of this rowset.
+					1: required i64 startRowOffset
+					2: required list<TRow> rows
+					3: optional list<TColumn> columns
+					4: optional binary binaryColumns
+					5: optional i32 columnCount
+					6: optional list<TEnColumn> enColumns
+				}
+			\end{lstlisting}
+			
+			TEnColumns `enData` is a binary blob containing the contiguous compressed batches within the node's block of the output file.
+			`nulls` is a bitmap indicating null rows in the column set.
+			`type is the column's data-type.
+			`batchSize` contains the batch size for each compressed batch.
+			
+			TRowSet `startRowOffet` and `rows` are deprecated following \href{https://issues.apache.org/jira/browse/HIVE-3746}{HIVE-3746}.
+			Result files are now column-oriented and either in `binaryColumns` or a combination of `columns` and `enColumns`.
 			
 	\subsection{Compressor-Decompressor Interface}
-		\begin{verbatim}
+		\begin{lstlisting}[title=org.apache.hive.service.cli.CompDe; CompDe.java,gobble=6,otherkeywords={ColumnBuffer}]
+			@InterfaceAudience.Private
+			@InterfaceStability.Stable
 			public interface ColumnCompDe {
-			    public byte[] compress(ColumnBuffer columns);
-			    public ColumnBuffer decompress(
-			        byte[] columnBlob, int startByte, int endByte);
-			    public boolean isCompressible(ColumnBuffer columns);
+				public byte[] compress(ColumnBuffer columns);
+				public ColumnBuffer decompress(
+					byte[] columnBlob, int startByte, int endByte);
+				public boolean isCompressible(ColumnBuffer columns);
 			}
-		\end{verbatim}
+		\end{lstlisting}
 
 			
 \section{Custom Compressors}
