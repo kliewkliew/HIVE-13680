@@ -30,8 +30,7 @@
 	except that the columns are in `binaryColumns` rather than a list of TColumn after \href{https://issues.apache.org/jira/browse/HIVE-12049}{HIVE-12049}
 
 \section{Interface}
-	\paragraph{We can provide a default compressor list for beeline. But for other apps using the JDBC driver, we shouldn't modify connection parameters. Should we make new versions of the JDBC driver always send all compressors in the classpath (as a handshake rather than a connection string parameter) so that performance gains are seen o-o-t-b without configuration from the user?}
-	%need to provide client with a way to disable compression in this case.
+	\paragraph{Should we give priority to the server or client preference for compressors? ie. the client prefers snappy first, gzip second, but the server prefers gzip first, snappy second. Should we use gzip or snappy?}
 
 \section{Compressor-Decompressor}
 	\paragraph{How do we handle the case where the compressor throws an exception while handling a batch? Do we restart serialization and serialize the batch as an uncompressed column? What do we do with prior batches that were already serialized? We may have to restart serialization of the whole result set. Is there a better solution?}
