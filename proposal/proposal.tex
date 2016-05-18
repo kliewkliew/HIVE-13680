@@ -101,7 +101,6 @@
 		
 		TBD
 		%where does decompression occur in the client? will we operate on (Encoded)ColumnBasedSet or directly on TRowSet?
-		%The client will have the entire blob containing contiguous batches, or does it receive batches separately? 
 		
 	\subsection{Compressed RowSet Structures}
 		\subsubsection{HiveServer2 Structures}
@@ -119,7 +118,6 @@
 					1: required binary enData
 					2: required binary nulls
 					3: required TTypeId type
-					4: required list<i32> batchSize
 				}
 				
 				// Represents a rowset
@@ -138,7 +136,6 @@
 			TEnColumns `enData` is a binary blob containing the contiguous compressed batches within the node's block of the output file.
 			`nulls` is a bitmap indicating null rows in the column set.
 			`type` is the column's data-type.
-			`batchSize` contains the batch size for each compressed batch.
 			
 			TRowSet `startRowOffet` and `rows` are deprecated following \href{https://issues.apache.org/jira/browse/HIVE-3746}{HIVE-3746}.
 			Result files are now column-oriented and either in `binaryColumns` (on HiveServer2) or a combination of `columns` and `enColumns` (in the task nodes and in the client).
@@ -150,17 +147,16 @@
 			@InterfaceStability.Stable
 			public interface ColumnCompDe {
 				public byte[] compress(ColumnBuffer columns);
-				public ColumnBuffer decompress(
-					byte[] columnsBlob, int startByte, int endByte);
+				public ColumnBuffer decompress(byte[] columnsBlob);
 				public boolean isCompressible(ColumnBuffer columns);
 			}
 		\end{lstlisting}
 		
 		Operating in the final task node, `compress` takes a batch of rows contained in `columns` (number of rows will be equal to or less than \linebreak hive.server2.thrift.resultset.max.fetch.size) and outputs a binary blob.
 		The compressor is free to pack additional details such as look-up tables within this blob.
+		`isCompressible` is checked by the server before compressing a column.
 		
-		TBD
-		%The client will have the entire blob containing contiguous batches, or does it receive batches separately? 
+		The client receives results batch-by-batch. calling `decompress` on each batch to receive a ColumnBuffer containing the rows of that batch.
 			
 \section{Custom Compressors}
 		A default compressor will be provided for Snappy compression.

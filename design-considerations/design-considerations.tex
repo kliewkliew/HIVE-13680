@@ -35,10 +35,12 @@
 
 \section{Compressor-Decompressor}
 	\paragraph{How do we handle the case where the compressor throws an exception while handling a batch? Do we restart serialization and serialize the batch as an uncompressed column? What do we do with prior batches that were already serialized? We may have to restart serialization of the whole result set. Is there a better solution?}
+	Prior batches will be compressed. If an exception is thrown while processing a column, it won't be compressed for that batch. The client will receive it as an uncompressed column and will know that it does not need to be decompressed. The server will still try to compress that column for all other batches and those that succeed will be compressed.
 	
 	\paragraph{Where does decompression occur in the client? Will we operate on (Encoded)ColumnBasedSet or directly on TRowSet? Which files should I look at?}
 	We probably get a TRowSet and deserialize that to (Encoded)ColumnBasedSet from which we decompress batch(es).
 	
 	\paragraph{hive.server2.thrift.resultset.max.fetch.size: "Max number of rows sent in one Fetch RPC call by the server to the client." If the client receives batch-by-batch, then we don't need to store the batch size in TEnColumn because the client will receive and decompress each batch separately instead of receiving one huge blob with all batches? So does the client receive the batches separately or in one blob?}
+	Batch-by-batch so we do not need a list of batch sizes.
 
 \end{document}
