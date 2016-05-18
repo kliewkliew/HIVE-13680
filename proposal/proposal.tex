@@ -28,7 +28,7 @@
 	\href{https://issues.apache.org/jira/browse/HIVE-12049}{HIVE-12049}
 	, HiveServer2 would read a full ResultSet from HDFS before deserializing and re-serializing into Thrift objects for RPC transfer.
 	Following our enhancement, task nodes serialize Thrift objects from their own block of a ResultSet file. 
-	HiveServer2 reads the Thrift output and deserializes all columns as one binary blob rather than column-by-column and transfers the ResultSet to the remote client. 
+	HiveServer2 reads the Thrift output and transfers it to the remote client. 
 	This parallel serialization strategy reduced latency in the data pipeline.
 	
 	However, network capacity is often the most scarce resource in a system. 
