@@ -41,5 +41,7 @@
 	
 	\paragraph{hive.server2.thrift.resultset.max.fetch.size: "Max number of rows sent in one Fetch RPC call by the server to the client." If the client receives batch-by-batch, then we don't need to store the batch size in TEnColumn because the client will receive and decompress each batch separately instead of receiving one huge blob with all batches? So does the client receive the batches separately or in one blob?}
 	Batch-by-batch so we do not need a list of batch sizes.
+	
+	\paragraph{How can we ensure that result sets are compressed for cases where the query does not invoke any map-reduce tasks (ie. select * from table)? Our SerDe is not called so if we write our compressor within the SerDe, then some queries will not be compressed.}
 
 \end{document}
