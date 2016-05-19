@@ -58,29 +58,44 @@
 		Type-specific compression can be achieved by implementing a compressor that delegates compression to other compressors based on a case-switch block.
 		
 	\subsection{Client-Server Negotiation}
-		Upon connection, both the client and server will send a list of compressors ordered by preference.
+		Upon connection, the client will send a list of available compressors. The server will reply with a list of compressors ordered by preference.
 		Both the client and server will choose the first compressor in the server's list that also exists in the client's list.
 		All results for that session will be compressed using that compressor.
-		The results will not be compressed if there are no compressors available on both the server and client.
+		The results will not be compressed if the client and server cannot agree on a compressor.
 		This negotiation scheme will maintain compatibility with old clients while using compression whenever it is available.
 		
 	\subsection{Configuration options}
 		\begin{table}[H]
 			\begin{tabular}{| p{3cm} | c | p{6.5cm} |} \hline
 				\textbf{Option} & \textbf{Default} & \textbf{Description} \\ \hline
-					hive.resultSet\linebreak
-					.compressor\linebreak
-					.enabled
-				 & true & Enable or disable compressor negotiation. \\ \hline
-					 hive.server2\linebreak
-					 .thrift.resultset\linebreak
-					 .max.fetch.size
-				 & 1000 & Max number of rows sent in one Fetch RPC call by the server to the client. Also max number of rows in one compressed batch.
-				 \\ \hline
+				hive.resultSet\linebreak
+				.compressor\linebreak
+				.enabled
+				& true & Enable or disable compressor negotiation. \\ \hline
+				hive.resultSet\linebreak
+				.compressor\linebreak
+				.list
+				& snappy & A comma-separated list of compressors that the server can use, ordered by preference.
+				\\ \hline
+				hive.server2\linebreak
+				.thrift.resultset\linebreak
+				.max.fetch.size
+				& 1000 & Max number of rows sent in one Fetch RPC call by the server to the client.
+				\\ \hline
 			\end{tabular}
-			\caption{Configuration options}
+			\caption{Server configuration options}
 		\end{table}
 
+		\begin{table}[H]
+			\begin{tabular}{| p{3cm} | c | p{6.5cm} |} \hline
+				\textbf{Parameter} & \textbf{Default} & \textbf{Description} \\ \hline
+				compressors
+				& snappy & A comma-separated list of compressors that the client can use. 
+				\\ \hline
+			\end{tabular}
+			\caption{Client connection parameters}
+		\end{table}
+		
 \section{Implementation}
 	
 	\subsection{Compression}
@@ -154,7 +169,7 @@
 		The compressor is free to pack additional details such as look-up tables within this blob.
 		`isCompressible` is checked by the server before compressing a column.
 		
-		The client receives results batch-by-batch. calling `decompress` on each batch to receive a ColumnBuffer containing the rows of that batch.
+		The client receives results batch-by-batch, calling `decompress` on each batch to receive a ColumnBuffer containing the rows of that batch.
 			
 \section{Custom Compressors}
 		A default compressor will be provided for Snappy compression.
