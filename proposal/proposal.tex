@@ -25,8 +25,8 @@
 	Consequently, any enhancement to the Thrift vector will benefit all users.
 	
 	Prior to 
-	\href{https://issues.apache.org/jira/browse/HIVE-12049}{HIVE-12049}
-	, HiveServer2 would read a full ResultSet from HDFS before deserializing and re-serializing into Thrift objects for RPC transfer.
+	\href{https://issues.apache.org/jira/browse/HIVE-12049}{HIVE-12049},
+	HiveServer2 would read a full ResultSet from HDFS before deserializing and re-serializing into Thrift objects for RPC transfer.
 	Following our enhancement, task nodes serialize Thrift objects from their own block of a ResultSet file. 
 	HiveServer2 reads the Thrift output and transfers it to the remote client. 
 	This parallel serialization strategy reduced latency in the data pipeline.
@@ -53,10 +53,10 @@
 \section{Design Overview}
 
 	\subsection{Compressor-Decompressor Interface}
-		We define a compressor interface which must be implemented by compressor plugins.
-		A default compressor will compress all data-types using the Snappy algorithm.
-		Type-specific compression can be achieved by implementing a compressor that delegates compression to other compressors based on a case-switch block.
-		Compressors may also pass specific data-types through uncompressed.
+		We define a compressor-decompressor (CompDe) interface which must be implemented by plugins.
+		A default CompDe will process all data-types using the Snappy algorithm.
+		Type-specific compression-decompression can be achieved by implementing a CompDe that delegates to other CompDes based on a case-switch block.
+		CompDes may also pass specific data-types through unprocessed.
 		
 		\begin{lstlisting}[title=org.apache.hive.service.cli.CompDe; CompDe.java,gobble=6,otherkeywords={ColumnBuffer,Object}]
 			@InterfaceAudience.Private
@@ -67,26 +67,18 @@
 			}
 		\end{lstlisting}
 		
-		Operating in the final task nodes, `compress` takes a batch of rows contained in a ColumnBuffer (number of rows will be equal to or less than \linebreak hive.server2.thrift.resultset.max.fetch.size) and outputs a binary blob.
+		Operating in the final task nodes, `compress` takes a batch of rows contained in a ColumnBuffer (number of rows will be equal to \linebreak hive.server2.thrift.resultset.max.fetch.size except for the last batch) and outputs a binary blob.
 		The compressor is free to pack additional details such as look-up tables within this blob.
 		
 		The client receives results batch-by-batch, calling `decompress` on each compressed column to receive an Object containing the rows in that column-batch which, along with `nulls` and the type-information in TEnColumn, will be used to construct a ColumnBuffer.
-		
-	\subsection{Client-Server Negotiation}
-		Upon connection, the client will send a list of available compressors. The server will reply with a list of compressors ordered by preference.
-		Both the client and server will choose the first compressor in the server's list that also exists in the client's list.
-		All results for that session will be compressed using that compressor.
-		The results will not be compressed if the client and server cannot agree on a compressor, or if either the client or server has configured an empty compressor list.
-		This negotiation scheme will maintain compatibility with old clients while using compression whenever it is available.
 		
 	\subsection{Configuration options}
 		\begin{table}[H]
 			\begin{tabular}{| p{3cm} | c | p{6.5cm} |} \hline
 				\textbf{Option} & \textbf{Default} & \textbf{Description} \\ \hline
 				hive.resultSet\linebreak
-				.compressor\linebreak
-				.list
-				& snappy & A comma-separated list of compressors that the server can use, ordered by preference.
+				.compressors
+				& snappy & A list of compressors that the server can use, ordered by preference.
 				\\ \hline
 				hive.server2\linebreak
 				.thrift.resultset\linebreak
@@ -101,39 +93,24 @@
 			\begin{tabular}{| p{3cm} | c | p{6.5cm} |} \hline
 				\textbf{Parameter} & \textbf{Default} & \textbf{Description} \\ \hline
 				compressors
-				& snappy & A comma-separated list of compressors that the client can use. 
+				& snappy & A list of compressors that the client can use. 
 				\\ \hline
 			\end{tabular}
 			\caption{Client connection parameters}
 		\end{table}
 		
+		\subsection{Client-Server Negotiation}
+		Upon connection, the client will send a list of available compressors. The server will reply with a list of compressors ordered by preference.
+		Both the client and server will choose the first compressor in the server's list that also exists in the client's list.
+		All results for that session will be compressed using that compressor.
+		The results will not be compressed if the client and server cannot agree on a compressor, or if either the client or server has configured an empty compressor list.
+		This negotiation scheme will maintain compatibility with old clients while using compression whenever it is available.
+		
 \section{Implementation}
-	
-	\subsection{Compression}
-		The output of a final node in a DAG is either a set of rows (from a map task) or a single value (from a reduce task).
-		Following
-		\href{https://issues.apache.org/jira/browse/HIVE-12049}{HIVE-12049}
-		, the output is buffered row-by-row into TColumns in TRowSet and serialized in batches to a file in HDFS.
-		The final output file is read by HiveServer2 (deserializing the columns as a binary blob) and sent to the client.
-		
-		Compressors will operate on the batch-level in ThriftJDBCBinarySerDe.
-		In the event that a column is not compressible, the column will be serialized as an uncompressed column.
-		Compressed and uncompressed columns will be serialized contiguously in the output file. A bit-mask will be created to indicate which columns were compressed successfully.
-		This allows for a robust system where each column will have a compression state per-batch. If any column fails to compress in one batch, that column can still be compressed in other batches.
-		
-		
-	\subsection{Decompression}
-		Results are serialized in batches.
-		Consequently, the client must deserialize batch-by-batch in ColumnBasedSet.
-		For each batch: the client starts with a check binary with a bit value for `1` and does a bitwise `AND` with the compressed-column bitmask.
-		If the result is equal to the starting bit, then the column is compressed.
-		The client reads either a compressed or uncompressed column into the appropriate Thrift object which is converted into a ColumnBuffer.
-		This is done for each column, with the check bit shifted to the left by one to check the next column for that iteration.
-		The end result is a ColumnBasedSet for each batch.
 	
 	\subsection{Thrift Structures}
 		
-		\begin{lstlisting}[title=TCLIService.thrift,gobble=8,otherkeywords={binary,i32,i64,string,struct,TColumn,TEnColumn,TRow,TRowSet,TTypeId}]
+		\begin{lstlisting}[title=TCLIService.thrift,gobble=6,otherkeywords={binary,i32,i64,string,struct,TColumn,TEnColumn,TRow,TRowSet,TTypeId}]
 			//Represents an encoded column
 			struct TEnColumn {
 				1: required binary enData
@@ -155,7 +132,7 @@
 			}
 		\end{lstlisting}
 		
-		TRowSet will have a list of TEnColumn to store compressed columns. The compressor-name and a bitmask to track compressed columns will also be added.
+		TRowSet will be amended to store the compressor-name, a bitmask to track compressed columns, and a list of TEnColumn (compressed columns).
 		Otherwise, the Thrift structures used to support compression are largely unchanged from 
 		\href{https://issues.apache.org/jira/browse/HIVE-10438}{HIVE-10438}
 		. They are described here for completeness.
@@ -165,8 +142,29 @@
 		`type` is the column's data-type.
 		
 		TRowSet `startRowOffet` and `rows` are deprecated following \href{https://issues.apache.org/jira/browse/HIVE-3746}{HIVE-3746}.
-		Result files are now column-oriented and either in `binaryColumns` (in the task nodes and on HiveServer2) or a combination of `columns` and `enColumns` (in the client).
+		Result files are now column-oriented and either in `binaryColumns` (in the task nodes and on HiveServer2) or a combination of `columns` and `enColumns` (in the client after deserializing `binaryColumns`).
 		`compressorName` indicates the compressor plugin that was used to compress the result set.
 		`compressorMask` is a bit-mask indicating compressed columns.
+		
+		\subsection{Compression}
+		The output of a final node in a DAG is either a set of rows (from a map task) or a single value (from a reduce task).
+		Following
+		\href{https://issues.apache.org/jira/browse/HIVE-12049}{HIVE-12049}
+		, the output is buffered row-by-row into TColumns in TRowSet and serialized in batches to a file in HDFS.
+		The final output file is read by HiveServer2 and sent to the client.
+		
+		Compressors will operate on the batch-level in ThriftJDBCBinarySerDe.
+		In the event that a column is not compressible, the column will be serialized as an uncompressed TColumn.
+		Compressed TEnColumn and uncompressed TColumn will be serialized contiguously in the output file. `compressorMask` will indicate which columns were compressed successfully.
+		This allows for a robust system where each column will have a compression state per-batch. If any column fails to compress in one batch, that column can still be compressed in other batches.
+		
+		\subsection{Decompression}
+		Results are serialized in batches.
+		Consequently, the client must deserialize batch-by-batch in ColumnBasedSet.
+		For each batch: the client starts with a check binary with a bit value for `1` and does a bitwise `AND` with `compressorMask`.
+		If the result is equal to the check bit, then the current column is compressed.
+		The client reads either a compressed or uncompressed column into the appropriate Thrift object which is converted into ColumnBuffer.
+		This is done for each column, with the check bit shifted to the left to check the compression state of that column for that iteration.
+		The end result is a ColumnBasedSet for each batch.
 		
 \end{document}
