@@ -58,12 +58,12 @@
 		Type-specific compression-decompression can be achieved by implementing a CompDe that delegates to other CompDes based on a case-switch block.
 		CompDes may also pass specific data-types through unprocessed.
 		
-		\begin{lstlisting}[title=org.apache.hive.service.cli.CompDe; CompDe.java,gobble=6,otherkeywords={ColumnBuffer,Object}]
+		\begin{lstlisting}[title=org.apache.hive.service.cli.CompDe; CompDe.java,gobble=6,otherkeywords={ColumnBuffer,Object,TEnColumn}]
 			@InterfaceAudience.Private
 			@InterfaceStability.Stable
 			public interface ColumnCompDe {
-				public byte[] compress(ColumnBuffer columns);
-				public Object decompress(byte[] columnsBlob);
+				public byte[] compress(ColumnBuffer column);
+				public Object decompress(TEnColumn compressedColumn);
 			}
 		\end{lstlisting}
 		
@@ -126,9 +126,7 @@
 				3: optional list<TColumn> columns
 				4: optional binary binaryColumns
 				5: optional i32 columnCount
-				6: optional list<TEnColumn> enColumns
-				7: optional string compressorName
-				8: optional binary compressorMask
+				6: optional binary compressorMask
 			}
 		\end{lstlisting}
 		
@@ -143,8 +141,8 @@
 		
 		TRowSet `startRowOffet` and `rows` are deprecated following \href{https://issues.apache.org/jira/browse/HIVE-3746}{HIVE-3746}.
 		Result files are now column-oriented and either in `binaryColumns` (in the task nodes and on HiveServer2) or a combination of `columns` and `enColumns` (in the client after deserializing `binaryColumns`).
-		`compressorName` indicates the compressor plugin that was used to compress the result set.
 		`compressorMask` is a bit-mask indicating compressed columns.
+		During the negotiation stage, both the server and client will use the same algorithm to choose the same CompDe, so it is not necessary to send the compressor name with TRowSet.
 		
 		\subsection{Compression}
 		The output of a final node in a DAG is either a set of rows (from a map task) or a single value (from a reduce task).

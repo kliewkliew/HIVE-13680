@@ -33,9 +33,10 @@
 \section{Interface}
 	
 	\paragraph{Should we give priority to the server or client preference for compressors? ie. the client prefers snappy first, gzip second, but the server prefers gzip first, snappy second. Should we use gzip or snappy?}
+	The server's preference should have priority.
 
 \section{Compressor-Decompressor}
-
+	
 	\paragraph{How can we ensure that result sets are compressed for cases where the query does not invoke any map-reduce tasks (ie. select * from table)? Our SerDe is not called so if we write our compressor within the SerDe, then some queries will not be compressed.}\
 	
 	\paragraph{How do we handle the case where the compressor throws an exception while handling a batch?}
@@ -46,5 +47,20 @@
 	
 	\paragraph{hive.server2.thrift.resultset.max.fetch.size: "Max number of rows sent in one Fetch RPC call by the server to the client." If the client receives batch-by-batch, then we don't need to store the batch size in TEnColumn because the client will receive and decompress each batch separately instead of receiving one huge blob with all batches? So does the client receive the batches separately or in one blob?}
 	Batch-by-batch so we do not need a list of batch sizes.
+	
+	\paragraph{Decompress needs the type information so that a CompDe implementation can delegate to other compressors based on data-type. Pass in type information as input? Or a TEnColumn, which has type info? Or encode the type information as part of the binary?}
+	Encoding type-info into the binary: places a lot of requirements on implementations of the CompDe. TEnColumn has all the necessary information without imposing requirements that the plugin encode certain data into the output binary, so lets use that.
+	
+	\paragraph{ODBC drivers will not implement a Java interface so we could have a compressor interface instead of a compressor-decompressor interface.}
+	The same applies to SerDes and yet SerDe includes `deserialize` as part of the interface.
+	
+	\paragraph{Decompressor should return something that is language-agnostic. Thrift object, TColumn? If we return Object, we can go from binaryColumns to TEnColumn to ColumnBuffer, but Object is specific to Java. If we return TColumn, we'd go from binaryColumns to TEnColumn to TColumn to ColumnBuffer, adding an extra step. How can we return something for both Java and C++ but not add an additional step to the deserialization process?}
+	`decompress` will only be called from a Java client so we should optimize the function output for Java. ODBC drivers will have their own implementation so the output of `decompress` does not need to be language-agnostic.
+	
+	\paragraph{If the user disables serialization in the task nodes \linebreak (hive.server2.thrift.resultset.serialize.in.tasks), is our SerDe called at all?}
+	No
+	
+	\paragraph{If the user disables serialization in the task nodes but wants compression?}
+	Our SerDe is not called and so compression will not occur. enColumns no longer has a use and can be removed.
 
 \end{document}
