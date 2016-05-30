@@ -48,6 +48,8 @@
 	\paragraph{hive.server2.thrift.resultset.max.fetch.size: "Max number of rows sent in one Fetch RPC call by the server to the client." If the client receives batch-by-batch, then we don't need to store the batch size in TEnColumn because the client will receive and decompress each batch separately instead of receiving one huge blob with all batches? So does the client receive the batches separately or in one blob?}
 	Batch-by-batch so we do not need a list of batch sizes.
 	
+\section*{May 24 2016}
+	
 	\paragraph{Decompress needs the type information so that a CompDe implementation can delegate to other compressors based on data-type. Pass in type information as input? Or a TEnColumn, which has type info? Or encode the type information as part of the binary?}
 	Encoding type-info into the binary: places a lot of requirements on implementations of the CompDe. TEnColumn has all the necessary information without imposing requirements that the plugin encode certain data into the output binary, so lets use that.
 	
@@ -62,5 +64,36 @@
 	
 	\paragraph{If the user disables serialization in the task nodes but wants compression?}
 	Our SerDe is not called and so compression will not occur. enColumns no longer has a use and can be removed.
-
+	
+\section*{May 26 2016}
+	
+	\subsection*{Compressor-Decompressor}
+	\begin{itemize}
+		\item give more responsibility to the compressor
+		\begin{itemize}
+			\item compressor should handle exceptions
+			\item compressor should be given the entire set of columns so that it can group similar columns for more efficient compression
+			\item provide a way for the client to pass parameters to the plugin
+			\begin{itemize}
+				\item pass byte array to an init function
+			\end{itemize}
+		\end{itemize}
+		\item make compress-decompress symmetric
+	\end{itemize}
+	
+	\subsection*{Configuration}
+	
+	\begin{itemize}
+		\item the entry class must be provided to use custom compressors
+		\item should be able to use different versions of the same algorithm so that plugins can have backward compatibility. ie. Snappy v2 vs v3
+		\begin{itemize}
+			\item version can be sent as part of the parameter byte array
+		\end{itemize}
+		\item how to allow client to configure the byte array that will be sent to the server for each plugin?
+	\end{itemize}
+	
+\section*{Next}
+	
+	\paragraph{Does the compressor have access to information about the server state? ie. for the server-side plugin, will the `init` function be able to accept/reject the compressor request based on server-state?}
+	
 \end{document}
