@@ -64,7 +64,10 @@
 		Type-specific compression-decompression can be achieved by implementing a CompDe that delegates to other CompDes based on a case-switch block.
 		CompDes may also pass specific data-types through unprocessed.
 		
-		\begin{lstlisting}[title=org.apache.hive.service.cli.CompDe;CompDe.java,gobble=6,otherkeywords={ColumnBasedSet,HashSet}]
+		\begin{lstlisting}[
+		title=org.apache.hive.service.cli.CompDe;CompDe.java,
+		gobble=6,
+		otherkeywords={ColumnBasedSet,HashSet}]
 			@InterfaceAudience.Private
 			@InterfaceStability.Stable
 			public interface ColumnCompDe {
@@ -177,7 +180,10 @@
 	
 	\subsection{Thrift Structures}
 		
-		\begin{lstlisting}[title=TCLIService.thrift,gobble=6,otherkeywords={binary,i32,i64,string,struct,TColumn,TCompressorConfig,TRow,TRowSet}]
+		\begin{lstlisting}[
+		title=TCLIService.thrift,
+		gobble=6,
+		otherkeywords={binary,i32,i64,string,struct,TColumn,TCompressorConfig,TRow,TRowSet}]
 			// Represents a rowset
 			struct TRowSet {
 				// The starting row offset of this rowset.
