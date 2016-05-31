@@ -1,5 +1,6 @@
 \documentclass[11pt,a4paper]{article}
 
+\usepackage{enumerate}
 \usepackage{float}
 \usepackage{hyperref}
 
@@ -21,6 +22,7 @@
 \maketitle
 
 \begin{abstract}
+	
 	Hive data pipelines invariably involve JDBC/ODBC drivers which access Hive through its Thrift interface. 
 	Consequently, any enhancement to the Thrift vector will benefit all users.
 	
@@ -33,9 +35,11 @@
 	
 	However, network capacity is often the most scarce resource in a system. 
 	As a further enhancement, network load can be eased by having task nodes compress their own block of a ResultSet as part of the serialization process.
+	
 \end{abstract}
 
 \section{Introduction}
+	
 	The changes proposed herein draw from Rohit Dholakia's design document and patches for
 	\href{https://issues.apache.org/jira/browse/HIVE-10438}{HIVE-10438}, which implemented compression on HiveServer2.
 	Now that
@@ -43,81 +47,137 @@
 	has been committed, compression can take place in parallel on the task nodes.
 	
 	Our goals for this enhancement are to:
+	
 	\begin{itemize}
 		\item improve performance out-of-the-box for new clients
 		\item maintain compatibility with old clients
 		\item provide flexibility yet security
-		\item confer a simple interface
+		\item confer a simple interface	
 	\end{itemize}
 	
 \section{Design Overview}
 
 	\subsection{Compressor-Decompressor Interface}
+		
 		We define a compressor-decompressor (CompDe) interface which must be implemented by plugins.
 		A default CompDe will process all data-types using the Snappy algorithm.
 		Type-specific compression-decompression can be achieved by implementing a CompDe that delegates to other CompDes based on a case-switch block.
 		CompDes may also pass specific data-types through unprocessed.
 		
-		\begin{lstlisting}[title=org.apache.hive.service.cli.CompDe; CompDe.java,gobble=6,otherkeywords={ColumnBuffer,Object,TEnColumn}]
+		\begin{lstlisting}[title=org.apache.hive.service.cli.CompDe;CompDe.java,gobble=6,otherkeywords={ColumnBasedSet,HashSet}]
 			@InterfaceAudience.Private
 			@InterfaceStability.Stable
 			public interface ColumnCompDe {
-				public byte[] compress(ColumnBuffer column);
-				public Object decompress(TEnColumn compressedColumn);
+				public boolean init(HashSet config);
+				public byte[] compress(ColumnBasedSet colSet);
+				public ColumnBasedSet decompress(byte[] compressedSet);
 			}
 		\end{lstlisting}
 		
-		Operating in the final task nodes, `compress` takes a batch of rows contained in a ColumnBuffer (number of rows will be equal to \linebreak hive.server2.thrift.resultset.max.fetch.size except for the last batch) and outputs a binary blob.
+		Operating in the final task nodes, `compress' takes a batch of rows contained in a ColumnBasedSet (number of rows will be equal to \linebreak hive.server2.thrift.resultset.max.fetch.size except for the last batch) and outputs a binary blob.
 		The compressor is free to pack additional details such as look-up tables within this blob.
 		
-		The client receives results batch-by-batch, calling `decompress` on each compressed column to receive an Object containing the rows in that column-batch which, along with `nulls` and the type-information in TEnColumn, will be used to construct a ColumnBuffer.
+		The client receives results batch-by-batch, calling `decompress' on each blob to receive a ColumnBasedSet.
 		
 	\subsection{Configuration options}
+		
 		\begin{table}[H]
-			\begin{tabular}{| p{3cm} | c | p{6.5cm} |} \hline
+			\begin{tabular}{| p{3.5cm} | p{2.2cm} | p{5.3cm} |} \hline
+				
 				\textbf{Option} & \textbf{Default} & \textbf{Description} \\ \hline
+				
 				hive.resultSet\linebreak
 				.compressors
-				& snappy & A list of compressors that the server can use, ordered by preference.
+				& snappy
+				& A list of keywords for available compressors, ordered by preference.
 				\\ \hline
+				
 				hive.server2\linebreak
 				.thrift.resultset\linebreak
 				.max.fetch.size
-				& 1000 & Max number of rows sent in one Fetch RPC call by the server to the client.
+				& 1000
+				& Max number of rows sent in one Fetch RPC call by the server to the client.
 				\\ \hline
+				
+				hive.resultset\linebreak
+				.compressor\linebreak
+				.snappy.class
+				& org.apache\linebreak.hive.resultset\linebreak.compressor\linebreak.snappy
+				& Map the snappy compressor keyword to a Java class.
+				\\ \hline
+				
+				hive.resultset\linebreak
+				.compressor\linebreak
+				.\textless name\textgreater .class
+				&
+				& Map the \textless name\textgreater\space compressor keyword to a Java class.
+				\\ \hline
+				
+				hive.resultset\linebreak
+				.compressor\linebreak
+				.\textless name\textgreater.\textless param\textgreater
+				&
+				& A default option for \textless param\textgreater\space for the \textless name\textgreater\space compressor. 
+				\\ \hline
+				
 			\end{tabular}
 			\caption{Server configuration options}
 		\end{table}
-
+		
 		\begin{table}[H]
 			\begin{tabular}{| p{3cm} | c | p{6.5cm} |} \hline
+				
 				\textbf{Parameter} & \textbf{Default} & \textbf{Description} \\ \hline
 				compressors
-				& snappy & A list of compressors that the client can use. 
+				& snappy
+				& A hiveConfs list of compressor keywords that the client can use. 
 				\\ \hline
+				
+				compressor\linebreak
+				.\textless name\textgreater\linebreak
+				.\textless variable\textgreater
+				&
+				& A hiveConfs to override the default compressor config. 
+				\\ \hline
+				
 			\end{tabular}
 			\caption{Client connection parameters}
 		\end{table}
 		
 		\subsection{Client-Server Negotiation}
-		Upon connection, the client will send a list of available compressors. The server will reply with a list of compressors ordered by preference.
-		Both the client and server will choose the first compressor in the server's list that also exists in the client's list.
-		All results for that session will be compressed using that compressor.
-		The results will not be compressed if the client and server cannot agree on a compressor, or if either the client or server has configured an empty compressor list.
+		
+		CompDe negotiation proceeds as follows:
+		
+		\begin{enumerate}
+			
+			\item the client optionally notifies the server of available compressors by using `hiveConfs' parameters in the connection string
+			\begin{itemize}
+				\item a list of compressor keywords
+				\item parameters to override the server-configured compressor defaults for each plugin
+			\end{itemize}
+			
+			\item the server creates a list of compressors from the intersection of the client and server configured plugins, ordered by the server's preference
+			
+			\item for each plugin in the intersection
+			\begin{enumerate}[1.]
+				\item the server merges the server-configured defaults with the client overrides into a HashSet
+				\item the server passes the merged config to the `init' function of the compressor
+			\end{enumerate}
+			
+			\item the server notifies the client of the keyword for the first CompDe that successfully initialized
+		\end{enumerate}
+		
+		All result sets will be compressed using that CompDe.
+		The results will not be compressed if the client and server cannot agree on a compressor, if all of the available compressors fail to initialize with merged config, or if either the client or server has configured an empty compressor list.
 		This negotiation scheme will maintain compatibility with old clients while using compression whenever it is available.
+		
+		\pagebreak
 		
 \section{Implementation}
 	
 	\subsection{Thrift Structures}
 		
-		\begin{lstlisting}[title=TCLIService.thrift,gobble=6,otherkeywords={binary,i32,i64,string,struct,TColumn,TEnColumn,TRow,TRowSet,TTypeId}]
-			//Represents an encoded column
-			struct TEnColumn {
-				1: required binary enData
-				2: required binary nulls
-				3: required TTypeId type
-			}
-			
+		\begin{lstlisting}[title=TCLIService.thrift,gobble=6,otherkeywords={binary,i32,i64,string,struct,TColumn,TCompressorConfig,TRow,TRowSet}]
 			// Represents a rowset
 			struct TRowSet {
 				// The starting row offset of this rowset.
@@ -126,23 +186,16 @@
 				3: optional list<TColumn> columns
 				4: optional binary binaryColumns
 				5: optional i32 columnCount
-				6: optional binary compressorMask
 			}
 		\end{lstlisting}
 		
-		TRowSet will be amended to store the compressor-name, a bitmask to track compressed columns, and a list of TEnColumn (compressed columns).
-		Otherwise, the Thrift structures used to support compression are largely unchanged from 
+		TRowSet is unchanged by this enhancement. It is described here for completeness.
+		
+		`startRowOffet' and `rows` are deprecated in favor of `columns' following \href{https://issues.apache.org/jira/browse/HIVE-3746}{HIVE-3746}.
 		\href{https://issues.apache.org/jira/browse/HIVE-10438}{HIVE-10438}
-		. They are described here for completeness.
-		
-		TEnColumns `enData` is a binary blob containing one compressed row-batch of a column.
-		`nulls` is a bitmap indicating null rows in the column.
-		`type` is the column's data-type.
-		
-		TRowSet `startRowOffet` and `rows` are deprecated following \href{https://issues.apache.org/jira/browse/HIVE-3746}{HIVE-3746}.
-		Result files are now column-oriented and either in `binaryColumns` (in the task nodes and on HiveServer2) or a combination of `columns` and `enColumns` (in the client after deserializing `binaryColumns`).
-		`compressorMask` is a bit-mask indicating compressed columns.
-		During the negotiation stage, both the server and client will use the same algorithm to choose the same CompDe, so it is not necessary to send the compressor name with TRowSet.
+		added an option `hive.server2.thrift.resultset-.serialize.in.tasks' to serialize columns (in batches, and in parallel) to `binaryColumns' as contiguous TColumn. Following this enhancement, 
+		\href{https://issues.apache.org/jira/browse/HIVE-13680}{HIVE-13680},
+		`binaryColumns' will contain the output of the CompDes `decompress' function when compression is enabled.
 		
 		\subsection{Compression}
 		The output of a final node in a DAG is either a set of rows (from a map task) or a single value (from a reduce task).
@@ -152,17 +205,12 @@
 		The final output file is read by HiveServer2 and sent to the client.
 		
 		Compressors will operate on the batch-level in ThriftJDBCBinarySerDe.
-		In the event that a column is not compressible, the column will be serialized as an uncompressed TColumn.
-		Compressed TEnColumn and uncompressed TColumn will be serialized contiguously in the output file. `compressorMask` will indicate which columns were compressed successfully.
-		This allows for a robust system where each column will have a compression state per-batch. If any column fails to compress in one batch, that column can still be compressed in other batches.
+		If compression is enabled, `compress' will be called on a ColumnBasedSet and the output will be stored in `binaryColumns'.
+		We have elected to give the CompDe access to the full column set rather than compressing column-by-column as this allows for optimizations such as grouping similar columns under the same compression algorithm.
 		
 		\subsection{Decompression}
 		Results are serialized in batches.
 		Consequently, the client must deserialize batch-by-batch in ColumnBasedSet.
-		For each batch: the client starts with a check binary with a bit value for `1` and does a bitwise `AND` with `compressorMask`.
-		If the result is equal to the check bit, then the current column is compressed.
-		The client reads either a compressed or uncompressed column into the appropriate Thrift object which is converted into ColumnBuffer.
-		This is done for each column, with the check bit shifted to the left to check the compression state of that column for that iteration.
-		The end result is a ColumnBasedSet for each batch.
+		`decompress' is called on `binaryColumns' to get a ColumnBasedSet.
 		
 \end{document}
