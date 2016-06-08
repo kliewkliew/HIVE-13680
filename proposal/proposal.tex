@@ -59,9 +59,9 @@
 
 	\subsection{Compressor-Decompressor Interface}
 		
-		We define a compressor-decompressor (CompDe) interface which must be implemented by plugins.
+		We define a compressor-decompressor (CompDe) interface which must be implemented by CompDe plugins.
 		A default CompDe will process all data-types using the Snappy algorithm.
-		Type-specific compression-decompression can be achieved by implementing a CompDe that delegates to other CompDes based on a case-switch block.
+		Type-specific compression-decompression can be implemented by the CompDe.
 		CompDes may also pass specific data-types through unprocessed.
 		
 		\begin{lstlisting}[
@@ -213,6 +213,11 @@
 		Compressors will operate on the batch-level in ThriftJDBCBinarySerDe.
 		If compression is enabled, `compress' will be called on a ColumnBasedSet and the output will be stored in `binaryColumns'.
 		We have elected to give the CompDe access to the full column set rather than compressing column-by-column as this allows for optimizations such as grouping similar columns under the same compression algorithm.
+		
+		Currently, if the user has enabled `hive.exec.compress.output', the setting `mapred.output.compression.codec' (regardless of the execution engine) is checked to determine the codec used to compress the final SequenceFile.
+		However, this enhancement will have ThriftJDBCBinarySerDe compress data inside `binaryColumns' and serialize to a SequenceFile.
+		Applying additional compression on the SequenceFile will have diminished marginal returns while wasting cpu cycles.
+		Consequently, when a compressor plugin is configured,  `hive.exec.compress.output' will be disabled before executing the query-plan.
 		
 		\subsection{Decompression}
 		Results are serialized in batches.
