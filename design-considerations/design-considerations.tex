@@ -1,5 +1,6 @@
 \documentclass[11pt,a4paper]{article}
 \usepackage{hyperref}
+\usepackage{float}
 
 \title{Design Considerations}
 \author{Kevin Liew}
@@ -48,6 +49,58 @@
 	\paragraph{hive.server2.thrift.resultset.max.fetch.size: "Max number of rows sent in one Fetch RPC call by the server to the client." If the client receives batch-by-batch, then we don't need to store the batch size in TEnColumn because the client will receive and decompress each batch separately instead of receiving one huge blob with all batches? So does the client receive the batches separately or in one blob?}
 	Batch-by-batch so we do not need a list of batch sizes.
 	
+
+\section{Existing Compression Options}
+	\begin{table}[H]
+		\begin{tabular}{| p{3.5cm} | p{7.5cm} |} \hline
+			
+			\textbf{Parameter} & \textbf{Description} \\ \hline
+			hive.exec.compress\linebreak
+			.output
+			& Determines whether the output of the final map/reduce job in a query is compressed or not.
+			\\ \hline
+			
+			hive.exec.compress\linebreak
+			.intermediate
+			& Determines whether the output of the intermediate map/reduce jobs in a query is compressed or not.
+			\\ \hline
+			
+			mapred.output\linebreak
+			.compression.codec
+			& The codec class used to compress output of the final map/reduce job. 
+			\\ \hline
+			
+			hive.intermediate\linebreak
+			.compression.codec
+			& The codec class used to compress output of the intermediate map/reduce jobs. 
+			\\ \hline
+			
+			mapred.output\linebreak
+			.compression.type
+			& The strategy used to buffer compression blocks. (NONE|RECORD|BLOCK) 
+			\\ \hline
+			
+			hive.intermediate\linebreak
+			.compression.type
+			& The strategy used to buffer compression blocks. (NONE|RECORD|BLOCK) 
+			\\ \hline
+			
+			io.seqfile\linebreak
+			.compress.blocksize
+			& Size of a compressed block in bytes. 
+			\\ \hline
+			
+		\end{tabular}
+		\caption{Existing Compression Options}
+	\end{table}
+	
+	This enhancement supercedes the existing compression options for final output files. Compression options for intermediate results are interoperable with our enhancement.
+	
+	
+\pagebreak
+
+\section*{Meetings}
+
 \section*{May 24 2016}
 	
 	\paragraph{Decompress needs the type information so that a CompDe implementation can delegate to other compressors based on data-type. Pass in type information as input? Or a TEnColumn, which has type info? Or encode the type information as part of the binary?}
@@ -92,6 +145,11 @@
 		\item how to allow client to configure the byte array that will be sent to the server for each plugin?
 	\end{itemize}
 	
+\section*{June 8 2016}
+
+	\paragraph{Our enhancement supercedes `hive.exec.compress.output'. We should consider the possibility of superceding `hive.exec.compress.intermediate' by allowing our plugins to be used for intermediate result sets.}
+	That would require making HDFS aware of the compressor plugins used. Maybe in a future JIRA. For now, the existing output compression options are superceded by our enhancements while the intermediate compression options are interoperable. 
+
 \section*{Next}
 	
 	\paragraph{Does the compressor have access to information about the server state? ie. for the server-side plugin, will the `init` function be able to accept/reject the compressor request based on server-state?}
