@@ -72,22 +72,39 @@
 			@InterfaceStability.Stable
 			public interface ColumnCompDe {
 				public boolean init(HashSet config);
-				public byte[] compress(ColumnBasedSet colSet);
-				public ColumnBasedSet decompress(byte[] compressedSet);
+				public byte[] compress(ColumnBuffer[] colSet);
+				public ColumnBuffer[] decompress(byte[] compressedSet);
 			}
 		\end{lstlisting}
 		
-		Operating in the final task nodes, `compress' takes a batch of rows contained in a ColumnBasedSet (number of rows will be equal to \linebreak hive.server2.thrift.resultset.max.fetch.size except for the last batch) and outputs a binary blob.
+		Operating in the final task nodes, `compress' takes a batch of rows contained in a ColumnBuffer array (number of rows will be equal to \linebreak hive.server2.thrift.resultset.max.fetch.size except for the last batch) and outputs a binary blob.
 		The compressor is free to pack additional details such as look-up tables within this blob.
 		
-		The client receives results batch-by-batch, calling `decompress' on each blob to receive a ColumnBasedSet.
+		The client receives results batch-by-batch, calling `decompress' on each blob to receive an array of ColumnBuffer.
 		
 	\subsection{Configuration options}
 		
 		\begin{table}[H]
-			\begin{tabular}{| p{3.5cm} | p{2.2cm} | p{5.3cm} |} \hline
+			\begin{tabular}{| p{2.7cm} | p{1.9cm} | p{6.4cm} |} \hline
 				
 				\textbf{Option} & \textbf{Default} & \textbf{Description} \\ \hline
+				
+				hive.server2\linebreak
+				.thrift.resultset\linebreak
+				.serialize.in.tasks
+				& false
+				& Whether we should serialize the Thrift structures used in JDBC ResultSet RPC in task nodes.\linebreak
+				We use SequenceFile and ThriftJDBCBinarySerDe to read and write the final results if this is true.\linebreak
+				(Required for compression)
+				\\ \hline
+				
+				hive.server2\linebreak
+				.thrift.resultset\linebreak
+				.max.fetch.size
+				& 1000
+				& Max number of rows sent in one Fetch RPC call by the server to the client.\linebreak
+				(Determines rows in a compressed batch)
+				\\ \hline
 				
 				hive.resultSet\linebreak
 				.compressors
@@ -95,17 +112,10 @@
 				& A list of keywords for available compressors, ordered by preference.
 				\\ \hline
 				
-				hive.server2\linebreak
-				.thrift.resultset\linebreak
-				.max.fetch.size
-				& 1000
-				& Max number of rows sent in one Fetch RPC call by the server to the client.
-				\\ \hline
-				
 				hive.resultset\linebreak
 				.compressor\linebreak
 				.snappy.class
-				& org.apache\linebreak.hive.resultset\linebreak.compressor\linebreak.snappy
+				& org.apache\linebreak.hive\linebreak.resultset\linebreak.compressor\linebreak.snappy
 				& Map the snappy compressor keyword to a Java class.
 				\\ \hline
 				
@@ -118,13 +128,13 @@
 				
 				hive.resultset\linebreak
 				.compressor\linebreak
-				.\textless name\textgreater.\textless param\textgreater
+				.\textless name\textgreater\linebreak.\textless param\textgreater
 				&
 				& A default option for \textless param\textgreater\space for the \textless name\textgreater\space compressor. 
 				\\ \hline
 				
 			\end{tabular}
-			\caption{Server configuration options}
+			\caption{Server CompDe configuration options}
 		\end{table}
 		
 		\begin{table}[H]
@@ -147,7 +157,7 @@
 			\caption{Client connection parameters}
 		\end{table}
 		
-		\subsection{Client-Server Negotiation}
+	\subsection{Client-Server Negotiation}
 		
 		CompDe negotiation proceeds as follows:
 		
@@ -174,8 +184,6 @@
 		The results will not be compressed if the client and server cannot agree on a compressor, if all of the available compressors fail to initialize with merged config, or if either the client or server has configured an empty compressor list.
 		This negotiation scheme will maintain compatibility with old clients while using compression whenever it is available.
 		
-		\pagebreak
-		
 \section{Implementation}
 	
 	\subsection{Thrift Structures}
@@ -195,33 +203,35 @@
 			}
 		\end{lstlisting}
 		
-		TRowSet is unchanged by this enhancement. It is described here for completeness.
+		TRowSet is structurally unchanged by this enhancement. It is described here for completeness.
 		
 		`startRowOffet' and `rows` are deprecated in favor of `columns' following \href{https://issues.apache.org/jira/browse/HIVE-3746}{HIVE-3746}.
 		\href{https://issues.apache.org/jira/browse/HIVE-10438}{HIVE-10438}
-		added an option `hive.server2.thrift.resultset-.serialize.in.tasks' to serialize columns (in batches, and in parallel) to `binaryColumns' as contiguous TColumn. Following this enhancement, 
+		added an option `hive.server2.thrift.resultset-.serialize.in.tasks' to serialize columns (in batches, and in parallel on task nodes) to `binaryColumns' as contiguous TColumn. Following this enhancement, 
 		\href{https://issues.apache.org/jira/browse/HIVE-13680}{HIVE-13680},
-		`binaryColumns' will contain the output of the CompDes `decompress' function when compression is enabled.
+		`binaryColumns' will contain contiguous batches of the CompDes `decompress' function output when compression is enabled.
 		
-		\subsection{Compression}
+	\subsection{Compression}
+	
 		The output of a final node in a DAG is either a set of rows (from a map task) or a single value (from a reduce task).
 		Following
 		\href{https://issues.apache.org/jira/browse/HIVE-12049}{HIVE-12049}
 		, the output is buffered row-by-row into TColumns in TRowSet and serialized in batches to a file in HDFS.
 		The final output file is read by HiveServer2 and sent to the client.
 		
-		Compressors will operate on the batch-level in ThriftJDBCBinarySerDe.
-		If compression is enabled, `compress' will be called on a ColumnBasedSet and the output will be stored in `binaryColumns'.
+		Compressors will operate on the batch-level (`serializeBatch') in ThriftJDBCBinarySerDe to output binary which is serialized to `binaryColumns' of TRowSet via `TCompactProtocol.writeBinary'.
 		We have elected to give the CompDe access to the full column set rather than compressing column-by-column as this allows for optimizations such as grouping similar columns under the same compression algorithm.
 		
 		Currently, if the user has enabled `hive.exec.compress.output', the setting `mapred.output.compression.codec' (regardless of the execution engine) is checked to determine the codec used to compress the final SequenceFile.
-		However, this enhancement will have ThriftJDBCBinarySerDe compress data inside `binaryColumns' and serialize to a SequenceFile.
-		Applying additional compression on the SequenceFile will have diminished marginal returns while wasting cpu cycles.
-		Consequently, when a compressor plugin is configured,  `hive.exec.compress.output' will be disabled before executing the query-plan.
+		However, this enhancement will have ThriftJDBCBinarySerDe compress data inside `binaryColumns' which is serialized to a SequenceFile.
+		Applying additional compression on `binaryColumns' in the SequenceFile will have diminished marginal returns while wasting cpu cycles.
+		Consequently, when a compressor plugin is configured,  `hive.exec.compress.output' will be disabled before serializing the final output.
+		However, `hive.exec.compress.intermediate' and associated options are interoperable with this enhancement.
 		
-		\subsection{Decompression}
+	\subsection{Decompression}
+	
 		Results are serialized in batches.
 		Consequently, the client must deserialize batch-by-batch in ColumnBasedSet.
-		`decompress' is called on `binaryColumns' to get a ColumnBasedSet.
+		`decompress' is called on `binaryColumns' to get an array of ColumnBuffer.
 		
 \end{document}
