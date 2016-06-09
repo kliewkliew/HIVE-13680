@@ -50,7 +50,7 @@
 	Batch-by-batch so we do not need a list of batch sizes.
 	
 
-\section{Existing Compression Options}
+\section{Pre-existing Compression Options}
 	\begin{table}[H]
 		\begin{tabular}{| p{3.5cm} | p{7.5cm} |} \hline
 			
@@ -96,6 +96,9 @@
 	
 	This enhancement supercedes the existing compression options for final output files. Compression options for intermediate results are interoperable with our enhancement.
 	
+	Hive implements Hadoop `RecordWriter' interfaces which check the \linebreak `mapred.output.compression.codec' setting before serializing the final output.
+	Tez keeps an execution context which encapsulates a Hadoop RecordWriter.
+	Shark utilizes Hive RecordWriters as well.
 	
 \pagebreak
 

@@ -222,7 +222,7 @@
 		Compressors will operate on the batch-level (`serializeBatch') in ThriftJDBCBinarySerDe to output binary which is serialized to `binaryColumns' of TRowSet via `TCompactProtocol.writeBinary'.
 		We have elected to give the CompDe access to the full column set rather than compressing column-by-column as this allows for optimizations such as grouping similar columns under the same compression algorithm.
 		
-		Currently, if the user has enabled `hive.exec.compress.output', the setting `mapred.output.compression.codec' (regardless of the execution engine) is checked to determine the codec used to compress the final SequenceFile.
+		Currently, if the user has enabled `hive.exec.compress.output', the setting `mapred.output.compression.codec' (regardless of the execution engine) is checked by Hive's implementation of a Hadoop RecordWriter to determine the codec used to compress the final SequenceFile.
 		However, this enhancement will have ThriftJDBCBinarySerDe compress data inside `binaryColumns' which is serialized to a SequenceFile.
 		Applying additional compression on `binaryColumns' in the SequenceFile will have diminished marginal returns while wasting cpu cycles.
 		Consequently, when a compressor plugin is configured,  `hive.exec.compress.output' will be disabled before serializing the final output.
