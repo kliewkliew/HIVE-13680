@@ -209,7 +209,7 @@
 		\href{https://issues.apache.org/jira/browse/HIVE-10438}{HIVE-10438}
 		added an option `hive.server2.thrift.resultset-.serialize.in.tasks' to serialize columns (in batches, and in parallel on task nodes) to `binaryColumns' as contiguous TColumn. Following this enhancement, 
 		\href{https://issues.apache.org/jira/browse/HIVE-13680}{HIVE-13680},
-		`binaryColumns' will contain contiguous batches of the CompDes `decompress' function output when compression is enabled.
+		`binaryColumns' will contain contiguous batches of the CompDes `compress' function output (compressed sets of columns) when compression is enabled.
 		
 	\subsection{Compression}
 	
