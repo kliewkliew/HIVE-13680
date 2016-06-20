@@ -70,7 +70,7 @@
 		otherkeywords={ColumnBasedSet,HashSet}]
 			@InterfaceAudience.Private
 			@InterfaceStability.Stable
-			public interface ColumnCompDe {
+			public interface CompDe {
 				public boolean init(HashSet config);
 				public byte[] compress(ColumnBuffer[] colSet);
 				public ColumnBuffer[] decompress(byte[] compressedSet);
@@ -178,6 +178,9 @@
 			\end{enumerate}
 			
 			\item the server notifies the client of the keyword for the first CompDe that successfully initialized
+			\begin{itemize}
+				\item the compressor keyword is passed in the TOpenSessionResp Thrift message in the configuration map under the `compressor' key
+			\end{itemize}
 		\end{enumerate}
 		
 		All result sets will be compressed using that CompDe.
