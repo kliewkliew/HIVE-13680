@@ -67,15 +67,19 @@
 		\begin{lstlisting}[
 		title=org.apache.hive.service.cli.CompDe;CompDe.java,
 		gobble=6,
-		otherkeywords={ColumnBasedSet,HashSet}]
+		otherkeywords={ColumnBuffer,Map,String}]
 			@InterfaceAudience.Private
 			@InterfaceStability.Stable
 			public interface CompDe {
-				public boolean init(HashSet config);
+				public boolean init(Map<String, String> config);
 				public byte[] compress(ColumnBuffer[] colSet);
 				public ColumnBuffer[] decompress(byte[] compressedSet);
 			}
 		\end{lstlisting}
+		
+		The `init` function is used to initialize a CompDe plugin with input parameters.
+		Default parameters can be configured on the server and overridden by the client.
+		The CompDe returns `true' if it can proceed using this merged configuration.
 		
 		Operating in the final task nodes, `compress' takes a batch of rows contained in a ColumnBuffer array (number of rows will be equal to \linebreak hive.server2.thrift.resultset.max.fetch.size except for the last batch) and outputs a binary blob.
 		The compressor is free to pack additional details such as look-up tables within this blob.
@@ -109,28 +113,29 @@
 				hive.resultSet\linebreak
 				.compressors
 				& snappy
-				& A list of keywords for available compressors, ordered by preference.
+				& A list of names for available compressors, ordered by preference.
 				\\ \hline
 				
 				hive.resultset\linebreak
 				.compressor\linebreak
 				.snappy.class
 				& org.apache\linebreak.hive\linebreak.resultset\linebreak.compressor\linebreak.snappy
-				& Map the snappy compressor keyword to a Java class.
+				& Map the compressor identified by `snappy' to a Java class.
 				\\ \hline
 				
 				hive.resultset\linebreak
 				.compressor\linebreak
-				.\textless name\textgreater .class
+				.\textless name\textgreater\linebreak
+				.class
 				&
-				& Map the \textless name\textgreater\space compressor keyword to a Java class.
+				& Map the compressor identified by \textless name\textgreater\space to a Java class.
 				\\ \hline
 				
 				hive.resultset\linebreak
 				.compressor\linebreak
 				.\textless name\textgreater\linebreak.\textless param\textgreater
 				&
-				& A default option for \textless param\textgreater\space for the \textless name\textgreater\space compressor. 
+				& A default option for \textless param\textgreater\space for the compressor identified by \textless name\textgreater. 
 				\\ \hline
 				
 			\end{tabular}
@@ -143,12 +148,12 @@
 				\textbf{Parameter} & \textbf{Default} & \textbf{Description} \\ \hline
 				compressors
 				& snappy
-				& A hiveConfs list of compressor keywords that the client can use. 
+				& A hiveConfs list of names for compressors that the client can use. 
 				\\ \hline
 				
 				compressor\linebreak
 				.\textless name\textgreater\linebreak
-				.\textless variable\textgreater
+				.\textless param\textgreater
 				&
 				& A hiveConfs to override the default compressor config. 
 				\\ \hline
@@ -165,7 +170,7 @@
 			
 			\item the client optionally notifies the server of available compressors by using `hiveConfs' parameters in the connection string
 			\begin{itemize}
-				\item a list of compressor keywords
+				\item a list of compressor names
 				\item parameters to override the server-configured compressor defaults for each plugin
 			\end{itemize}
 			
@@ -173,13 +178,13 @@
 			
 			\item for each plugin in the intersection
 			\begin{enumerate}[1.]
-				\item the server merges the server-configured defaults with the client overrides into a HashSet
+				\item the server merges the server-configured defaults with the client overrides into a Map
 				\item the server passes the merged config to the `init' function of the compressor
 			\end{enumerate}
 			
-			\item the server notifies the client of the keyword for the first CompDe that successfully initialized
+			\item the server notifies the client of the name for the first CompDe that successfully initialized
 			\begin{itemize}
-				\item the compressor keyword is passed in the TOpenSessionResp Thrift message in the configuration map under the `compressor' key
+				\item the compressor name is passed in the TOpenSessionResp Thrift message in the configuration map under the `compressor' key
 			\end{itemize}
 		\end{enumerate}
 		
