@@ -111,6 +111,7 @@
 				\\ \hline
 				
 				hive.resultSet\linebreak
+				.server\linebreak
 				.compressors
 				& snappy
 				& A list of names for available compressors, ordered by preference.
@@ -146,14 +147,17 @@
 			\begin{tabular}{| p{3cm} | c | p{6.5cm} |} \hline
 				
 				\textbf{Parameter} & \textbf{Default} & \textbf{Description} \\ \hline
-				compressors
+				
+				hive.resultSet\linebreak
+				.client\linebreak
+				.compressors
 				& snappy
 				& A hiveConfs list of names for compressors that the client can use. 
 				\\ \hline
 				
-				compressor\linebreak
-				.\textless name\textgreater\linebreak
-				.\textless param\textgreater
+				hive.resultset\linebreak
+				.compressor\linebreak
+				.\textless name\textgreater\linebreak.\textless param\textgreater
 				&
 				& A hiveConfs to override the default compressor config. 
 				\\ \hline
@@ -184,7 +188,7 @@
 			
 			\item the server notifies the client of the name for the first CompDe that successfully initialized
 			\begin{itemize}
-				\item the compressor name is passed in the TOpenSessionResp Thrift message in the configuration map under the `compressor' key
+				\item the compressor name is passed in the TOpenSessionResp Thrift message in the configuration map under the `hive.resultset.comp-ressor' key
 			\end{itemize}
 		\end{enumerate}
 		
