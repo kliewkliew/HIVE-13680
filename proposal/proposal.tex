@@ -75,15 +75,16 @@
 			@InterfaceAudience.Private
 			@InterfaceStability.Stable
 			public interface CompDe {
-				public boolean init(Map<String, String> config);
+				public Map<String,String>
+				        init(Map<String,String> config);
 				public byte[] compress(ColumnBuffer[] colSet);
 				public ColumnBuffer[] decompress(byte[] compressedSet);
 			}
 		\end{lstlisting}
 		
 		The `init` function is used to initialize a CompDe plugin with input parameters.
-		Default parameters can be configured on the server and overridden by the client.
-		The CompDe returns `true' if it can proceed using this merged configuration.
+		Default parameters can be configured in the plugin and by the server and client.
+		The CompDe returns the finalized configuration in a `Map' if it can proceed using this merged configuration, otherwise `null' on failed initialization.
 		
 		Operating in the final task nodes, `compress' takes a batch of rows contained in a ColumnBuffer array (number of rows will be equal to \linebreak hive.server2.thrift.resultset.max.fetch.size except for the last batch) and outputs a binary blob.
 		The compressor is free to pack additional details such as look-up tables within this blob.
@@ -93,7 +94,7 @@
 	\subsection{Configuration options}
 		
 		\begin{table}[H]
-			\begin{tabular}{| p{3.2cm} | p{1.8cm} | p{6.1cm} |} \hline
+			\begin{tabular}{| p{3.3cm} | p{1.8cm} | p{6.1cm} |} \hline
 				
 				\textbf{Option} & \textbf{Default} & \textbf{Description} \\ \hline
 				
@@ -114,20 +115,23 @@
 				(Determines rows in a compressed batch)
 				\\ \hline
 				
-				hive.resultSet\linebreak
+				hive.server2\linebreak
+				.thrift.resultset\linebreak
 				.server.compressors
 				& snappy
 				& A list of names for available compressors, ordered by preference.
 				\\ \hline
 				
-				hive.resultset\linebreak
+				hive.server2\linebreak
+				.thrift.resultset\linebreak
 				.compressor\linebreak
 				.snappy.class
 				& org.apache\linebreak.hive\linebreak.resultset\linebreak.compressor\linebreak.snappy
 				& Map the compressor identified by `snappy' to a Java class.
 				\\ \hline
 				
-				hive.resultset\linebreak
+				hive.server2\linebreak
+				.thrift.resultset\linebreak
 				.compressor\linebreak
 				.\textless name\textgreater
 				.class
@@ -135,11 +139,12 @@
 				& Map the compressor identified by \textless name\textgreater\space to a Java class.
 				\\ \hline
 				
-				hive.resultset\linebreak
+				hive.server2\linebreak
+				.thrift.resultset\linebreak
 				.compressor\linebreak
 				.\textless name\textgreater.\textless param\textgreater
 				&
-				& A default option for \textless param\textgreater\space for the compressor identified by \textless name\textgreater. 
+				& A default configuration for \textless param\textgreater\space for the compressor identified by \textless name\textgreater. 
 				\\ \hline
 				
 			\end{tabular}
@@ -151,21 +156,23 @@
 				
 				\textbf{Parameter} & \textbf{Default} & \textbf{Description} \\ \hline
 				
-				hive.resultSet\linebreak
+				hive.server2\linebreak
+				.thrift.resultset\linebreak
 				.client.compressors
 				& snappy
-				& A hiveConfs list of names for compressors that the client can use. 
+				& A list of names for compressors that the client can use. 
 				\\ \hline
 				
-				hive.resultset\linebreak
+				hive.server2\linebreak
+				.thrift.resultset\linebreak
 				.compressor\linebreak
 				.\textless name\textgreater.\textless param\textgreater
 				&
-				& A hiveConfs to override the default compressor config. 
+				& The client configuration for \textless param\textgreater\space for the compressor identified by \textless name\textgreater.
 				\\ \hline
 				
 			\end{tabular}
-			\caption{Client connection parameters}
+			\caption{Client `hiveConf' connection parameters}
 		\end{table}
 		
 	\subsection{Client-Server Negotiation}
@@ -188,19 +195,57 @@
 				\item the server passes the merged config to the `init' function of the compressor
 			\end{enumerate}
 			
-			\item the server notifies the client of the name for the first CompDe that successfully initialized
+			\item the server notifies the client of the name and configuration for the first CompDe that successfully initialized
+			
+			\item the client tries to initialize this CompDe using the same parameters
 			\begin{itemize}
-				\item the compressor name is passed in the TOpenSessionResp Thrift message in the configuration map under the `hive.resultset.comp-ressor' key
+				\item if the CompDe fails to initialize on the client side, the client can restart the negotiation process with another CompDe list
+				\item if the CompDe initializes successfully, the client continues the session
 			\end{itemize}
+			
 		\end{enumerate}
 		
-		All result sets will be compressed using that CompDe.
+		All result sets will be compressed using the negotiated CompDe.
 		The results will not be compressed if the client and server cannot agree on a compressor, if all of the available compressors fail to initialize with merged config, or if either the client or server has configured an empty compressor list.
 		This negotiation scheme will maintain compatibility with old clients while using compression whenever it is available.
 		
 \section{Implementation}
 	
-	\subsection{Thrift Structures}
+	\subsection{Negotiation Thrift Structures}
+		
+		When a client connects to hiveserver2, it sends a TOpenSessionReq message to which the server responds with a TOpenSessionResp.
+		
+		\begin{lstlisting}[
+		title=TCLIService.thrift,
+		gobble=6,
+		otherkeywords={binary,i32,i64,string,struct,TColumn,TCompressorConfig,TRow,TRowSet}]
+			struct TOpenSessionReq {
+			
+				...
+				
+				// Configuration overlay which is applied when the
+				// session is first created.
+				4: optional map<string, string> configuration
+			}
+			
+			struct TOpenSessionResp {
+			
+				...
+				
+				// The CompDe configuration settings for this session.
+				4: optional map<string, string> compressorConfiguration
+				// The name of the CompDe
+				5: optional string compressorName
+			}
+		\end{lstlisting}
+		
+		The client can send a configuration overlay to override the server's CompDe settings (and other settings in `hive-site.xml').
+		To ensure symmetric compression-decompression, both the client and server must initialize the CompDe using the same parameters.
+		However, the client is not aware of the default settings on the server-side, so we will return the server's CompDe configuration merged with the client overlay in TOpenSessionResp.
+		
+		
+		
+	\subsection{RowSet Thrift Structures}
 	
 	TRowSet is structurally unchanged by this enhancement. It is described here for completeness.
 		
@@ -220,10 +265,14 @@
 		\end{lstlisting}
 		
 		`startRowOffet' and `rows` are deprecated in favor of `columns' following \href{https://issues.apache.org/jira/browse/HIVE-3746}{HIVE-3746}.
+		
 		\href{https://issues.apache.org/jira/browse/HIVE-10438}{HIVE-10438}
-		added an option `hive.server2.thrift.resultset-.serialize.in.tasks' to serialize columns (in batches, and in parallel on task nodes) to `binaryColumns' as contiguous TColumn. Following this enhancement, 
+		added `hive.server2.thrift.resultset.serialize.in.tasks' to serialize columns (in batches, and in parallel on task nodes) to `binaryColumns' as contiguous TColumn. Following this enhancement, 
 		\href{https://issues.apache.org/jira/browse/HIVE-13680}{HIVE-13680},
-		`binaryColumns' will contain contiguous batches of the CompDes `compress' function output (compressed sets of columns) when compression is enabled.
+		`binaryColumns' of each Thrift message will contain one compressed batch when compression is enabled.
+		
+		`columnCount' is used for deserializing TColumn from `binaryColumns' when a result set is not compressed.
+		A compressed result set must encode the number of columns in the binary output, as `columnCount' is not available to the compressor.
 		
 	\subsection{Compression}
 	
